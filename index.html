@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Viewer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #pdf-container { width: 100%; max-width: 800px; margin: 0 auto; }
+        #pdf-viewer { width: 100%; height: 600px; border: 1px solid #ccc; }
+        #file-input { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div id="pdf-container">
+        <h1>PDF Viewer</h1>
+        <input type="file" id="file-input" accept=".pdf" />
+        <div id="pdf-viewer"></div>
+    </div>
+
+    <!-- PDF.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script>
+        // Initialize PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+        
+        const fileInput = document.getElementById('file-input');
+        const pdfViewer = document.getElementById('pdf-viewer');
+        
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file.type !== 'application/pdf') {
+                alert('Please select a PDF file');
+                return;
+            }
+            
+            const fileReader = new FileReader();
+            fileReader.onload = function() {
+                const typedArray = new Uint8Array(this.result);
+                renderPDF(typedArray);
+            };
+            fileReader.readAsArrayBuffer(file);
+        });
+        
+        function renderPDF(data) {
+            pdfViewer.innerHTML = ''; // Clear previous content
+            
+            pdfjsLib.getDocument(data).promise.then(function(pdf) {
+                // Display first page
+                pdf.getPage(1).then(function(page) {
+                    const scale = 1.5;
+                    const viewport = page.getViewport({ scale });
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    
+                    pdfViewer.appendChild(canvas);
+                    
+                    page.render({
+                        canvasContext: context,
+                        viewport: viewport
+                    });
+                });
+            });
+        }
+    </script>
+</body>
+</html>
