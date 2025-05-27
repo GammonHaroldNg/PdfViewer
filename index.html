@@ -3,68 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Viewer</title>
+    <title>GitHub PDF Viewer</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
-        #pdf-container { width: 100%; max-width: 800px; margin: 0 auto; }
-        #pdf-viewer { width: 100%; height: 600px; border: 1px solid #ccc; }
-        #file-input { margin-bottom: 20px; }
+        .container { display: flex; }
+        #thumbnail-container { 
+            width: 250px; 
+            margin-right: 20px;
+            overflow-y: auto;
+        }
+        .thumbnail {
+            cursor: pointer;
+            margin-bottom: 10px;
+            border: 2px solid transparent;
+            padding: 5px;
+        }
+        .thumbnail:hover { border-color: #007bff; }
+        .thumbnail canvas { width: 100%; height: auto; }
+        #pdf-viewer { flex: 1; }
+        #pdf-canvas { width: 100%; height: 90vh; border: 1px solid #ccc; }
     </style>
 </head>
 <body>
-    <div id="pdf-container">
-        <h1>PDF Viewer</h1>
-        <input type="file" id="file-input" accept=".pdf" />
-        <div id="pdf-viewer"></div>
+    <div class="container">
+        <div id="thumbnail-container"></div>
+        <canvas id="pdf-canvas"></canvas>
     </div>
 
-    <!-- PDF.js library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
     <script>
-        // Initialize PDF.js worker
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
-        
-        const fileInput = document.getElementById('file-input');
-        const pdfViewer = document.getElementById('pdf-viewer');
-        
-        fileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file.type !== 'application/pdf') {
-                alert('Please select a PDF file');
-                return;
-            }
-            
-            const fileReader = new FileReader();
-            fileReader.onload = function() {
-                const typedArray = new Uint8Array(this.result);
-                renderPDF(typedArray);
-            };
-            fileReader.readAsArrayBuffer(file);
-        });
-        
-        function renderPDF(data) {
-            pdfViewer.innerHTML = ''; // Clear previous content
-            
-            pdfjsLib.getDocument(data).promise.then(function(pdf) {
-                // Display first page
-                pdf.getPage(1).then(function(page) {
-                    const scale = 1.5;
-                    const viewport = page.getViewport({ scale });
-                    
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    
-                    pdfViewer.appendChild(canvas);
-                    
-                    page.render({
-                        canvasContext: context,
-                        viewport: viewport
-                    });
-                });
-            });
+        // PDF.js configuration
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+
+        // GitHub repository configuration
+        const repoConfig = {
+            username: 'YOUR_GITHUB_USERNAME',
+            repo: 'YOUR_REPO_NAME',
+            branch: 'main',
+            pdfFolder: 'pdfs'
+        };
+
+        // Get PDF files from GitHub repository
+        async function loadPDFList() {
+            const response = await fetch(`https://api.github.com/repos/${repoConfig.username}/${repoConfig.repo}/contents/${repoConfig.pdfFolder}`);
+            const files = await response.json();
+            return files.filter(file => file.name.endsWith('.pdf'));
         }
+
+        // Generate thumbnail for a PDF
+        async function createThumbnail(pdfPath) {
+            const container = document.getElementById('thumbnail-container');
+            
+            // Create thumbnail wrapper
+            const thumbnailDiv = document.createElement('div');
+            thumbnailDiv.className = 'thumbnail';
+            
+            // Create canvas for thumbnail
+            const canvas = document.createElement('canvas');
+            thumbnailDiv.appendChild(canvas);
+            container.appendChild(thumbnailDiv);
+
+            // Load PDF
+            const pdf = await pdfjsLib.getDocument(pdfPath).promise;
+            const page = await pdf.getPage(1);
+            
+            // Set thumbnail dimensions
+            const viewport = page.getViewport({ scale: 0.2 });
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            // Render thumbnail
+            await page.render({
+                canvasContext: canvas.getContext('2d'),
+                viewport: viewport
+            }).promise;
+
+            // Add click handler
+            thumbnailDiv.addEventListener('click', () => showFullPDF(pdfPath));
+        }
+
+        // Show full PDF in viewer
+        async function showFullPDF(pdfPath) {
+            const canvas = document.getElementById('pdf-canvas');
+            const pdf = await pdfjsLib.getDocument(pdfPath).promise;
+            
+            // Clear previous PDF
+            canvas.width = 0;
+            canvas.height = 0;
+
+            // Render first page
+            const page = await pdf.getPage(1);
+            const viewport = page.getViewport({ scale: 1.5 });
+            
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            
+            await page.render({
+                canvasContext: canvas.getContext('2d'),
+                viewport: viewport
+            }).promise;
+        }
+
+        // Initialize the app
+        async function init() {
+            try {
+                const pdfFiles = await loadPDFList();
+                for(const file of pdfFiles) {
+                    const pdfUrl = `https://raw.githubusercontent.com/${repoConfig.username}/${repoConfig.repo}/${repoConfig.branch}/${repoConfig.pdfFolder}/${file.name}`;
+                    await createThumbnail(pdfUrl);
+                }
+                if(pdfFiles.length > 0) {
+                    const firstPdf = `https://raw.githubusercontent.com/${repoConfig.username}/${repoConfig.repo}/${repoConfig.branch}/${repoConfig.pdfFolder}/${pdfFiles[0].name}`;
+                    showFullPDF(firstPdf);
+                }
+            } catch (error) {
+                console.error('Error loading PDFs:', error);
+            }
+        }
+
+        init();
     </script>
 </body>
 </html>
